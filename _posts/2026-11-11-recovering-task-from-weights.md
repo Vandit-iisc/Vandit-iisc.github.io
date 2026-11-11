@@ -6,7 +6,7 @@ authors:
   - name: Vandit Patel
     affiliation: (Indian Institute of Science)
   - name: Prayalankar
-    affiliation: (Stryker AI Research)
+    affiliation: 
   - name: Prathosh AP
     affiliation: (Indian Institute of Science)
 ---
@@ -305,7 +305,7 @@ The 3-vs-8 claim holds up: units 69 and 17 contribute more than 2 to the logit o
 
 ## What we learned
 
-**1. The overall structure is readable but the underlying rule that governs the neural network is not** From weights alone, the agents recovered a lot:
+**1. The overall structure is readable but the underlying rule that governs the neural network is not.** From weights alone, the agents recovered a lot:
 
 - the dataset, from the 67 frozen pixels;
 - that the data was not augmented, from the mask's asymmetry;
