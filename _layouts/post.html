@@ -1,0 +1,9 @@
+---
+layout: default
+---
+<article>
+  <h1>{{ page.title }}</h1>
+  {% if page.authors %}<p class="authors">{{ page.authors }}</p>{% endif %}
+  <p class="meta">{{ page.date | date: "%B %-d, %Y" }}</p>
+  {{ content }}
+</article>
