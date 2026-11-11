@@ -28,3 +28,5 @@ code { font-size: 0.88em; background: #f0efec; padding: 1px 4px; border-radius: 
 mjx-container[display="true"] { overflow-x: auto; overflow-y: hidden; }
 footer { border-top: 1px solid var(--line); margin: 60px 0 30px; padding-top: 14px;
          color: var(--muted); font: 14px system-ui, sans-serif; }
+.author { margin: 3px 0; }
+.affiliation { font-weight: 400; font-size: 0.95rem; color: #52514e; margin-left: 6px; }

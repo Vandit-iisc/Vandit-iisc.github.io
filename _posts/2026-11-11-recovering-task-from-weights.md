@@ -157,36 +157,38 @@ Why is it so hard to read this rule off the weights? Three pieces of maths expla
 
 ### 1. Weights are made of training images
 
-Write the per-example loss as $$\ell = \mathrm{BCE}(z, y)$$ and the error as $$e = \sigma(z) - y$$. For BCE, $$\partial \ell / \partial z = e$$, and from the definitions above
+Write the per-example loss as $$\ell = -\big[y \log \sigma(z) + (1-y)\log(1-\sigma(z))\big]$$. Its derivative with respect to the logit simplifies to the prediction error, $$\partial \ell / \partial z = \sigma(z) - y =: e$$, because the sigmoid's derivative $$\sigma(1-\sigma)$$ cancels the denominators of the log-loss. From the definitions above,
 
 $$
-\frac{\partial z}{\partial w_j} = v_j\, s_j(x)\, x .
+\frac{\partial z}{\partial w_j} = v_j\, s_j(x)\, x ,
+\qquad\text{so}\qquad
+g_j = \sum_{n \in \text{batch}} e_n\, v_j\, s_j(x_n)\, x_n
 $$
 
-So each gradient step adds a multiple of an *input image* to $$w_j$$. Summing over training, with learning rate $$\eta$$:
+is the gradient for $$w_j$$ on one batch: an error-weighted sum of *input images*. With plain SGD, each step subtracts $$\eta\, g_j$$, and the trained template would be its initialisation plus a weighted sum of training images. This network was trained with Adam, which changes the step in two ways. It replaces $$g_j$$ by a running average $$m_j$$ of recent gradients, and it rescales every pixel's step by its own positive factor $$d_{j,i} = 1/(\sqrt{\hat v_{j,i}} + \epsilon)$$:
 
 $$
-w_j^{(\text{end})} = w_j^{(0)} - \eta \sum_{\text{steps}} \sum_{n} e_n\, v_j\, s_j(x_n)\, x_n .
+w_j^{(\text{end})} = w_j^{(0)} - \eta \sum_{\text{steps } t} d_j^{(t)} \odot m_j^{(t)} .
 $$
 
-**Every trained template is its initialisation plus a weighted sum of training images.** Three of the agents' findings follow directly.
+**So every trained template is its initialisation plus a sum of training images, each rescaled pixel by pixel.** The images still decide the sign and shape of every update; Adam only changes how large each pixel's step is. Three of the agents' findings follow directly.
 
-**Frozen pixels.** If pixel $$i$$ is blank in every training image, then $$x_{n,i} = 0$$ for all $$n$$. No update ever touches $$w_{j,i}$$, so it stays at its initial value. PyTorch initialises this layer from $$\mathcal{U}(-1/\sqrt{784}, 1/\sqrt{784}) = \mathcal{U}(-1/28, 1/28)$$. A pixel whose 128 weights all still lie within $$\pm 1/28$$ is therefore almost certainly a pixel that was never inked. The agents counted exactly 67 such pixels, the known MNIST number, and all 67 are blank in every one of our sample images. A dataset leaves a fingerprint in the weights.
+**Frozen pixels.** If pixel $$i$$ is blank in every training image, then $$x_{n,i} = 0$$ for all $$n$$. The gradient for $$w_{j,i}$$ is then zero at every step, so Adam's running average for that pixel is zero and its step is exactly zero (there is no weight decay). The weight stays at its initial value. PyTorch initialises this layer from $$\mathcal{U}(-1/\sqrt{784}, 1/\sqrt{784}) = \mathcal{U}(-1/28, 1/28)$$. A pixel whose 128 weights all still lie within $$\pm 1/28$$ is therefore almost certainly a pixel that was never inked. The agents counted exactly 67 such pixels, the known MNIST number, and all 67 are blank in every one of our sample images. A dataset leaves a fingerprint in the weights.
 
-**Dead units.** If unit $$j$$ is off for every training image, then $$s_j(x_n) = 0$$ and the whole row never moves. Its output weight doesn't move either, because $$\partial z/\partial v_j = \max(0, a_j) = 0$$. Four units, 11, 38, 106 and 114, sit exactly at the norm expected at initialisation, $$\sqrt{784 \cdot (1/28)^2/3} \approx 0.58$$. Their output weights are still inside the initial range $$\pm 1/\sqrt{128} \approx 0.088$$, and none of them fires on any of our 50 images. Every other unit grew to about 5× its initial norm.
+**Dead units.** If unit $$j$$ is off for every training image at every step of training, then $$s_j(x_n) = 0$$ throughout, its gradient is always zero, and the whole row never moves. Its output weight doesn't move either, because $$\partial z/\partial v_j = \max(0, a_j) = 0$$. Four units, 11, 38, 106 and 114, sit exactly at the norm expected at initialisation, $$\sqrt{784 \cdot (1/28)^2/3} \approx 0.58$$. Their output weights are still inside the initial range $$\pm 1/\sqrt{128} \approx 0.088$$, and none of them fires on any of our 50 images. Every other unit grew well beyond its initial norm: by a median of about 5.6×, ranging from 2.3× to 9.1×.
 
 <figure>
   <img src="{{ '/assets/img/f05_frozen.png' | relative_url }}" alt="Left: the 67 frozen pixels at the corners and edges of the image. Right: weight norms of all 128 units; four sit at the initial value 0.58, the rest are around 3">
   <figcaption>Figure 5. Two fingerprints of the training data. Left: the 67 pixels no image ever inked. Right: four units that never switched on and so never trained.</figcaption>
 </figure>
 
-**Hard examples dominate.** Agent A turned the formula into a prediction. Treating the $$v_j$$ as slowly varying and summing over units gives
+**Hard examples dominate.** Agent A turned this into a prediction. As a heuristic, ignore Adam's averaging, treat the $$v_j$$ as slowly varying, and sum over units:
 
 $$
-T = \sum_j v_j w_j \approx T^{(0)} - \eta \sum_n e_n \Big(\sum_j v_j^2\, s_j(x_n)\Big) x_n .
+T = \sum_j v_j w_j \;\approx\; \sum_j v_j w_j^{(0)} \;-\; \eta \sum_{\text{steps } t}\sum_n e_n \sum_j v_j^2\, s_j(x_n)\, \big(d_j^{(t)} \odot x_n\big) .
 $$
 
-Each image enters with weight proportional to its error $$e_n$$. Early in training every image has a large error, and $$T$$ resembles the mean class-1 image minus the mean class-0 image. But once an image is classified confidently, $$e_n \to 0$$ and it stops contributing. The final weights are therefore shaped by the *hard* images near the boundary, much like support vectors in an SVM. Agent A's approximation "$$T \approx$$ mean class-1 image − mean class-0 image" holds only weakly: on our samples the correlation is 0.12. **A well-trained network stores the differences between look-alike digits, not what each class looks like.** That is why "what does class 1 look like?" has no direct answer in the weights.
+Within every step, each image enters with weight proportional to its error $$e_n$$. Adam keeps the overall step size roughly constant even as the errors shrink, so late in training the steps are as large as ever but are driven almost entirely by the few images that are still misjudged. Early in training every image has a large error, and $$T$$ resembles the mean class-1 image minus the mean class-0 image. But once an image is classified confidently, $$e_n \to 0$$ and it stops contributing. The final weights are therefore shaped by the *hard* images near the boundary, much like support vectors in an SVM. Agent A's approximation "$$T \approx$$ mean class-1 image − mean class-0 image" holds only weakly: on our samples the correlation is 0.12. **A well-trained network stores the differences between look-alike digits, not what each class looks like.** That is why "what does class 1 look like?" has no direct answer in the weights.
 
 ### 2. Units are detectors with vetoes
 
@@ -203,7 +205,7 @@ Ink spread along the flanks slowly accumulates positive evidence, while a little
   <figcaption>Figure 6. The strongest class-1 units, each labelled with the digit it actually fires on and overlaid with that digit's average shape. The dark slits sit in the gaps the digit leaves open.</figcaption>
 </figure>
 
-Units 28, 61 and 69 are 3-detectors whose slits sit in the open left side of the 3, exactly where an 8 would close the loop. Unit 61 fires on none of our 8s. Units 63, 86, 100 and 46 detect 2s, and units 13, 30 and 102 detect 7s. Each unit encodes a *contrast* between a class-1 digit and its class-0 look-alike, as the training dynamics predicts.
+Units 28, 61 and 69 are 3-detectors whose slits sit in the open left side of the 3, roughly where an 8 would close the loop. Unit 61 fires on none of our five 8s, and units 28 and 69 each fire on only one. Units 63, 86, 100 and 46 detect 2s, and units 13, 30 and 102 detect 7s. Each unit encodes a *contrast* between a class-1 digit and its class-0 look-alike, as the training dynamics predicts.
 
 ### 3. The network is piecewise linear, and the gates decide
 
