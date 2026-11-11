@@ -2,7 +2,9 @@
 layout: post
 title: "Can an LLM Read a Neural Network? Recovering a Classifier's Task from Its Weights"
 description: "We gave LLMs the raw weights of a small digit classifier and asked what it was trained to do. The wrong answers, a two-bit hint, and the maths of why weights are hard to read."
-authors: Vandit Patel, Prayalankar, Prathosh AP
+authors: Vandit Patel(Indian Institute of Science) 
+         Prayalankar(Stryker AI Research) 
+         Prathosh AP(Indian Institute of Science)
 ---
 
 Suppose someone hands you 100,609 floating-point numbers. They tell you these are the weights of a small network that takes a 28×28 grayscale image and outputs one bit. There are no training data, no labels and no description of the task. Could you work out what the network was trained to do?
@@ -328,4 +330,4 @@ Everything in this post can be regenerated from the companion repository, **[Van
 
 A fuller record would include every agent and subagent transcript, tool trace and token count, so that the effects of decomposition, extra compute and extra information could be separated.
 
-*Written with Prayalankar and Prathosh AP. Comments and pointers to related work are welcome. Open an issue on the [companion repository](https://github.com/Vandit-iisc/Recovering-Neural-Network-Task).*
+Comments and pointers to related work are welcome. 
