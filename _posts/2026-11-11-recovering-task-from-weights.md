@@ -319,13 +319,13 @@ The maths says why the exact rule stays hidden. Trained weights encode error-wei
 
 ## Reproducibility
 
-Everything in this post can be regenerated from the files in the [repository](https://github.com/Vandit-iisc):
+Everything in this post can be regenerated from the companion repository, **[Vandit-iisc/Recovering-Neural-Network-Task](https://github.com/Vandit-iisc/Recovering-Neural-Network-Task)**:
 
-- `scripts/make_figures.py` builds every figure from `data/weights.txt` and `data/sample50.csv`.
-- `scripts/region_erasure.py` prints the region table above.
-- `scripts/digits.py` holds our by-eye digit readings.
-- `agents/` contains the agents' own weights-only analysis script and the shared brief for the four-agent round, which states the hint explicitly.
+- `data/` holds the classifier's weights, the 50 sample images, and our by-eye digit readings.
+- `astra/` holds the exact prompt sent to GPT-6 Astra and its settings.
+- `agents/` holds the agents' weights-only analysis script and the shared brief for the four-agent round, which states the hint explicitly.
+- `analysis/make_figures.py` builds every figure in this post, and `analysis/region_erasure.py` prints the region table.
 
-We also keep the Astra prompt and responses. A fuller record would include every agent and subagent transcript, tool trace and token count, so that the effects of decomposition, extra compute and extra information could be separated.
+A fuller record would include every agent and subagent transcript, tool trace and token count, so that the effects of decomposition, extra compute and extra information could be separated.
 
-*Written with Prayalankar and Prathosh AP. Comments and pointers to related work are welcome. Open an issue on [GitHub](https://github.com/Vandit-iisc).*
+*Written with Prayalankar and Prathosh AP. Comments and pointers to related work are welcome. Open an issue on the [companion repository](https://github.com/Vandit-iisc/Recovering-Neural-Network-Task).*
