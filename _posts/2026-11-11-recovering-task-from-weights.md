@@ -317,9 +317,9 @@ The maths says why the exact rule stays hidden. Trained weights encode error-wei
 
 **2. A coherent story is not a correct one.** "A ring with an empty centre, so it's 0" fit every feature the blind agents looked at, and two independent analyses converged on it. Parity convinced both Astra and a hinted agent. Familiar answers are attractive even when evidence points elsewhere.
 
-**3. Hints are data and that changes the prediction** Two bits of information, "five digits per class", changed the outcome more than any amount of analysis. Any claim about what an LLM can read from weights has to state exactly what it was told.
+**3. Hints are data and that changes the prediction.** Two bits of information, "five digits per class", changed the outcome more than any amount of analysis. Any claim about what an LLM can read from weights has to state exactly what it was told.
 
-**4. We cant always average out all the agents answer** The best-calibrated agent was right and the worst was worse than chance. Averaging chose the worst agent's answer.
+**4. We cant always average out all the agents answer.** The best-calibrated agent was right and the worst was worse than chance. Averaging chose the worst agent's answer.
 
 **5. Check weight-reading against inputs.** Every weight-based claim we tested had a simple behavioural test, and several failed it. Explanations from weights are hypotheses until activations on real data confirm them.
 
