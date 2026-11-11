@@ -1,6 +1,6 @@
 # vandit-iisc.github.io
 
-Personal blog, built by GitHub Pages' native Jekyll. No theme gem, no Actions workflow.
+Personal blog, built by GitHub Pages' native Jekyll. No theme gem and no Actions workflow.
 
 ## Deploy (first time)
 
@@ -9,19 +9,27 @@ Personal blog, built by GitHub Pages' native Jekyll. No theme gem, no Actions wo
 3. Settings → Pages → Source: "Deploy from a branch", branch `main`, folder `/ (root)`.
 4. After about a minute the site is live at https://vandit-iisc.github.io
 
-## Adding a post
+## Where things live
 
-Create `_posts/YYYY-MM-DD-slug.md` with front matter (`layout: post`, `title`, `description`, `authors`).
-Math: `$$...$$` inline, or `$$` on its own lines for display. Images go in `assets/img/`.
+| To change | Edit |
+|---|---|
+| Post text | `_posts/2026-11-11-recovering-task-from-weights.md` |
+| Fonts, colours, author highlight | `assets/css/style.css` |
+| Site title and tagline | `_config.yml` |
+| Header and footer | `_layouts/default.html` |
+| Title, authors, date block | `_layouts/post.html` |
 
-## Figures
+Math in posts: `$$...$$` inline, or `$$` on its own lines for display. Inside `<figcaption>` (raw HTML), use `\( ... \)`.
 
-- `python scripts/make_figures.py`: figures 1–4 (from numbers reported in the paper).
-- `python scripts/make_weight_figures.py`: figures 5–8 (from `data/weights.txt` and `data/sample50.csv`).
+## Reproducing the post
 
-`scripts/digits.py` holds the by-eye digit readings of the 50 samples. `data/` and `scripts/` are excluded
-from the built site, but they are visible in a public repo: delete `data/` before pushing if the weights shouldn't be public.
+All scripts need numpy and matplotlib.
 
-## Local preview (optional)
+- `python scripts/make_figures.py`: every figure in `assets/img/`.
+- `python scripts/region_erasure.py`: the region votes and erasure table.
+- `python agents/run_agent_analysis.py`: the agents' own weights-only analysis (`agents/experiment.py`), which never runs the network.
+- `agents/four_agent_brief.md`: the shared brief for the four-agent round, including the hint.
+- `scripts/digits.py`: by-eye digit readings of the 50 samples.
 
-`gem install jekyll kramdown-parser-gfm && jekyll serve`, then open http://localhost:4000
+`data/`, `scripts/` and `agents/` are excluded from the built site, but they are visible in a public repo.
+Delete `data/` before pushing if the weights shouldn't be public.

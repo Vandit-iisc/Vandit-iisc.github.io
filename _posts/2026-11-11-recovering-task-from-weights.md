@@ -1,193 +1,331 @@
 ---
 layout: post
 title: "Can an LLM Read a Neural Network? Recovering a Classifier's Task from Its Weights"
-description: "We handed GPT-6 Astra the raw weights of a small MLP and asked what it was trained to do. A single call guessed parity. A team of agents found the real rule."
-authors: Vandit Patel(IISc)
-         Prayalankar(Stryker AI Research)
-         Prathosh AP(IISc)
+description: "We gave LLMs the raw weights of a small digit classifier and asked what it was trained to do. The wrong answers, a two-bit hint, and the maths of why weights are hard to read."
+authors: Vandit Patel, Prayalankar, Prathosh AP
 ---
 
-Suppose I give you a file of 100,609 floating-point numbers and tell you they are the weights of a small network that takes a 28×28 grayscale image and outputs a single bit. Nothing else: no training data, no labels, no description of the task. Could you tell me what the network was trained to do?
+Suppose someone hands you 100,609 floating-point numbers. They tell you these are the weights of a small network that takes a 28×28 grayscale image and outputs one bit. There are no training data, no labels and no description of the task. Could you work out what the network was trained to do?
 
-That's the question this post is about, with a large language model doing the reading instead of a person. The short version: a single long-reasoning call to GPT-6 Astra figured out that the network looks at handwritten digits but guessed the wrong rule (even vs. odd, at 42% confidence). A hierarchy of agents working on the same weights produced several close candidates, and one branch got the exact rule.
+We put that question to large language models, in two ways. A single long call to **GPT-6 Astra** worked out that the network looks at handwritten digits, but it guessed the wrong rule: even vs. odd. A team of **Claude** agents, working without hints, settled confidently on a different wrong rule, "zero vs. everything else". Then they were told one small fact, that each class contains five digits. After that, their candidates came within one or two digits of the truth, and one of the four agents found the exact rule.
 
-## Where the question came from
+This post tells that story in order, including the wrong turns, which turned out to be the most informative part. Then it works through the maths of *why* a trained network's weights are so hard to read, and checks every claim the agents made against the network itself.
 
-The starting point was the experiments around *Sparks of Weight Space Programming*, which look at whether LLMs can interpret and edit neural network parameters directly. One experiment there shows an LLM the weights of a game-playing policy network, along with a description of its architecture, input channels and actions, and asks which game it plays. The authors report correct identifications for four selected policies, each from a single response in a fresh conversation.
+## Contents
 
-The idea behind weight-space programming is that parameters become something an LLM can inspect, describe, generate or modify. We only look at the *interpretive* direction here: given a trained parameter set, can the model work out what task the computation implements? (Editing the weights and showing changed behaviour would be a separate intervention experiment.)
+1. [The network](#the-network)
+2. [The ground rules, and what each system saw](#the-ground-rules-and-what-each-system-saw)
+3. [Act 1: one long call guesses parity](#act-1-one-long-call-guesses-parity)
+4. [Act 2: blind agents see a zero](#act-2-blind-agents-see-a-zero)
+5. [Act 3: a two-bit hint and four angles](#act-3-a-two-bit-hint-and-four-angles)
+6. [The maths of reading weights](#the-maths-of-reading-weights)
+7. [Checking the agents against the network](#checking-the-agents-against-the-network)
+8. [What we learned](#what-we-learned)
 
-## The setup
+## The network
 
-The network is a plain one-hidden-layer MLP:
-
-<figure>
-  <img src="{{ '/assets/img/fig1_pipeline.png' | relative_url }}" alt="Pipeline: 28x28 image, flattened to 784, 128 ReLU hidden units, one raw logit, thresholded at zero">
-  <figcaption>Figure 1. The classifier we asked the LLM to interpret.</figcaption>
-</figure>
-
-Writing an image as $$X \in [0,255]^{28\times 28}$$ and its normalised, flattened form as $$x = \mathrm{vec}(X/255) \in \mathbb{R}^{784}$$, the model computes
-
-$$
-h(x) = \mathrm{ReLU}(W_1 x + b_1), \qquad z(x) = W_2\, h(x) + b_2, \qquad \hat y(x) = \mathbb{1}\{z(x) > 0\},
-$$
-
-with $$W_1 \in \mathbb{R}^{128\times 784}$$, $$b_1 \in \mathbb{R}^{128}$$, $$W_2 \in \mathbb{R}^{1\times 128}$$ and $$b_2 \in \mathbb{R}$$. It was trained with `BCEWithLogitsLoss`, so $$z$$ is a raw logit and $$\sigma(z) > 0.5$$ means class 1. Flattened index $$i$$ maps to pixel row $$\lfloor i/28 \rfloor$$ and column $$i \bmod 28$$, which matters as soon as you start reading rows of $$W_1$$ as images.
-
-Formally, we want an inference procedure $$\mathcal{A}$$ that produces a semantic hypothesis
-
-$$
-\hat H = \mathcal{A}(\theta, M, X, y),
-$$
-
-from the parameters $$\theta = \{W_1, b_1, W_2, b_2\}$$, architectural metadata $$M$$, and optionally one labelled example $$(X, y)$$. For digit classification the exact target is a map $$g : \{0,\dots,9\} \to \{0,1\}$$. The network we used was trained on
-
-$$
-g(d) = \begin{cases} 1 & d \in \{0, 2, 3, 5, 7\} \\ 0 & d \in \{1, 4, 6, 8, 9\} \end{cases}
-$$
-
-that is, primes plus zero against everything else. (Calling it "prime vs. non-prime" would leave zero's side undecided, so we state the partition explicitly.) We score a guess two ways. **Domain recovery** asks whether the model realised these are handwritten digits. **Exact partition recovery** asks whether it put all ten digits on the right side, with the label orientation preserved. Partial credit is counted as digit assignments out of 10. That is a comparison between symbolic sets, not image-level accuracy.
-
-## Attempt 1: one long call
-
-We sent GPT-6 Astra one request through the Responses API with high reasoning effort and no tools (`tools = []`, `tool_choice = none`). It contained the full-precision weights, the normalisation and flattening conventions, the activation and loss, and one randomly chosen labelled image from our 50-image CSV (row 44, picked with a recorded seed).
-
-One honest detail: the *first* request failed. It had a 4,096-token output budget, spent all of it on reasoning, and stopped with `max_output_tokens` before giving any answer. The second request raised the budget to 32,768 tokens and asked for a shorter visible answer. It used **669,642 input tokens** and **14,546 output tokens**, 14,224 of them reasoning, and finished normally. When I say "single-call baseline" below, I mean this completed second request.
-
-Astra described the example image as a handwritten zero, which it is, and proposed
-
-$$
-\text{class 1} = \{0,2,4,6,8\}, \qquad \text{class 0} = \{1,3,5,7,9\},
-$$
-
-at confidence 0.42, calling parity tentative and noting that other partitions were possible.
-
-This was not a blind guess. The answer cited specific parameters, for example $$W_1[2,349] \approx -0.635$$ paired with $$W_2[0,2] \approx +0.478$$, and $$W_1[12,462] \approx +0.330$$ paired with $$W_2[0,12] \approx -0.914$$, and these values match the file. The model really was reading the weights. It then reached for a familiar rule, and parity agrees with the truth on only 0, 1, 2 and 9: **4/10 digits, no exact recovery.**
-
-## Attempt 2: a hierarchy of agents
-
-Next we split the problem up. Four main agents (A, B, C, D) each ran three subagents, giving 12 subagents in total. The subagents analysed the weights, mostly by reading rows of $$W_1$$ as spatial templates, and each main agent combined its branch's findings into a ranked list of candidate partitions.
+The idea comes from the *Weight-Space Programming* experiments by Takehi, Teoh, Zhang and Khattab (MIT CSAIL). There, LLMs inspect, describe and edit neural-network parameters directly. In one experiment, an LLM reads the weights of a game-playing policy and names the game. We ask the same question of a much plainer object:
 
 <figure>
-  <img src="{{ '/assets/img/fig2_partitions.png' | relative_url }}" alt="Grid of digits 0-9 coloured by class for the ground truth, the single-call answer, and each agent's top pick; mismatches outlined">
-  <figcaption>Figure 2. Every proposed partition, digit by digit. Dashed outlines mark disagreements with the ground truth. Agent C's top pick is exact; A and D each get 8/10.</figcaption>
+  <img src="{{ '/assets/img/f01_pipeline.png' | relative_url }}" alt="Pipeline: 28x28 image, flattened to 784 inputs, 128 ReLU hidden units, one raw logit, thresholded at zero">
+  <figcaption>Figure 1. The classifier: one hidden layer of 128 ReLU units and a single output logit.</figcaption>
 </figure>
 
-Agent C's preferred hypothesis was exactly $$\{0,2,3,5,7\}$$ vs. $$\{1,4,6,8,9\}$$. A and D each placed eight of ten digits correctly (A's top pick was also C's second choice), and B's top pick got six. One caveat on how to read this: *one branch* found the exact answer. If we had simply ranked all candidates together, by mean score for example, B's partition would have come out on top. Recovery by an individual branch and the aggregate ranking are different things, and the second is less impressive.
-
-Note also what every candidate agrees on: 2 and 3 always go to class 1, and 1 and 4 always go to class 0. The disagreements are concentrated on 5, 6, 7 and 8.
-
-## How do you read a task off weights?
-
-The agents' main tool was to treat each hidden unit as a spatial detector. For hidden unit $$j$$, let $$w_j = W_1[j,:]^\top \in \mathbb{R}^{784}$$, $$b_j = b_1[j]$$, and $$v_j = W_2[0,j]$$. Its pre-activation and contribution to the logit are
+With $$x = \mathrm{vec}(X/255) \in \mathbb{R}^{784}$$, the network computes
 
 $$
-a_j(x) = w_j^\top x + b_j, \qquad c_j(x) = v_j \max\big(0,\, a_j(x)\big), \qquad z(x) = \sum_{j=0}^{127} c_j(x) + b_2 .
+h(x) = \mathrm{ReLU}(W_1 x + b_1), \qquad z(x) = W_2\, h(x) + b_2, \qquad \hat y(x) = \mathbb{1}\{z(x) > 0\}.
 $$
 
-Reshape $$w_j$$ to 28×28 and you get a template: where it is positive, ink excites the unit; where it is negative, ink suppresses it. The sign of $$v_j$$ then says whether that unit pushes toward class 1 or class 0. There is also an indirect route. If a class-0 unit ($$v_j<0$$) has negative weights in some region, ink there *switches it off*, which raises the logit through disinhibition.
+It was trained with `BCEWithLogitsLoss`, so $$z$$ is a raw logit and $$\sigma(z) > 0.5$$ means class 1. Flattened pixel $$i$$ sits at row $$\lfloor i/28 \rfloor$$ and column $$i \bmod 28$$. The whole post reads the network one hidden unit at a time, so here is the notation once:
 
-**A default answer for blank input.** Several strongly class-0 units had small positive biases (about $$+0.10$$ to $$+0.21$$), mostly negative input weights, and the output bias was near $$-0.34$$. That points to a design where a blank image defaults toward class 0, and ink in the right places turns that suppression off. The blank-image logit is
+| Symbol | Meaning |
+|---|---|
+| $$w_j = W_1[j,:]^\top \in \mathbb{R}^{784}$$ | unit $$j$$'s input weights; reshaped to 28×28, a "template" |
+| $$b_j = b_1[j]$$ | unit $$j$$'s bias |
+| $$v_j = W_2[0,j]$$ | unit $$j$$'s output weight, its "vote": $$v_j > 0$$ pushes toward class 1 |
+| $$a_j(x) = w_j^\top x + b_j$$ | pre-activation |
+| $$s_j(x) = \mathbb{1}[a_j(x) > 0]$$ | gate: is the unit on? |
+| $$c_j(x) = v_j \max(0, a_j(x))$$ | the unit's contribution to the logit, so $$z = \sum_j c_j + b_2$$ |
+| $$T = \sum_j v_j w_j$$ | the vote-weighted sum of all templates, used heavily by the agents |
+
+The task the network was actually trained on is a map $$g : \{0,\dots,9\} \to \{0,1\}$$:
 
 $$
-z(\mathbf{0}) = \sum_{j=0}^{127} v_j \max(0, b_j) + b_2 ,
+g(d) = 1 \iff d \in \{0, 2, 3, 5, 7\},
 $$
 
-so the default depends on the whole sum, not only on the sign of $$b_2$$.
+that is, **primes plus zero** against everything else. We score a guess by how many of the ten digits it places on the correct side, out of 10. Exact recovery means all ten. Two baselines help calibrate the scores. A random five-against-five split gets 5/10 right on average, because each digit is a coin flip. And it hits the exact set with probability $$1/\binom{10}{5} = 1/252 \approx 0.4\%$$.
 
-**Where the evidence sits.** The agents pointed to four regions of the image:
+## The ground rules, and what each system saw
 
-<figure>
-  <img src="{{ '/assets/img/fig3_regions.png' | relative_url }}" alt="28 by 28 pixel grid with two blue regions on the left favouring class 1 and two orange regions in the centre and upper right favouring class 0">
-  <figcaption>Figure 3. Image regions the agents flagged. Blue regions carry evidence for class 1 and orange regions for class 0. Rows and columns follow the flattening convention above.</figcaption>
-</figure>
+The agents were held to strict rules:
 
-The bottom-left region R1 (rows 18–24, columns 1–5) was the clearest class-1 signal, with roughly 16 units of aggregate weight favouring ink against about 1 opposing it. That matches the base of a 2, the bottom tails of 3 and 5, and rounded contours generally. The upper-left tips R2 match where the arcs of 2 and 3 begin.
+- No forward passes: they could not run the network on any input, real or synthetic.
+- They could not look at the example image.
+- They could not compute dot products between the weights and imagined digits, since that is a forward pass in disguise.
 
-On the class-0 side, the central vertical band R3 is where a 1 is drawn and where the stems of 4 and 9 sit. The upper-right strip R4 is where the top bar of a 7 (or 5) ends:
+What they could do was analyse and plot the weights, and use their general knowledge of what digits look like to *interpret* what they saw. The two systems were not given the same information, which matters for any comparison:
 
-<figure>
-  <img src="{{ '/assets/img/fig4_support.png' | relative_url }}" alt="Bar chart: class-1 units oppose ink in the central band and upper right much more than they favour it; class-0 units favour central ink">
-  <figcaption>Figure 4. Aggregate weight favouring vs. opposing ink, as reported by the agents. Class-1 units are strongly suppressed by ink in the centre and upper right, while class-0 units welcome central ink.</figcaption>
-</figure>
+| | Single call | Agent system |
+|---|---|---|
+| Model | GPT-6 Astra (high reasoning effort) | Claude Opus 5.5, in Claude Code |
+| Structure | one request, no tools | 4 main agents × 3 subagents = 12, after earlier single-agent rounds |
+| Tools | none | Python (numpy, matplotlib) on the weights only |
+| Weights | full precision | full precision |
+| Labelled example | yes, one image (a 0, class 1) | no, forbidden |
+| "Each class has 5 digits" | no | yes, in the final round |
+| "The data is plain MNIST" | no | yes, in the final round, after agents inferred it |
+| Compute | 669,642 input and 14,546 output tokens | not matched; much larger |
 
-**Why the agents disagreed.** The hard digits are those whose strokes cross regions with opposite meanings. A 5 has an upper-left stroke and a bottom-left tail (class 1), but its middle stroke falls in class-0 territory, and the branches' scores for 5 ranged from 0.08 to 0.75. A 7 is permitted by some units (39, 27) while others (73, 23, 96, 33) specifically penalise the end of its top bar. An 8's outer loops look like class 1, but units 36, 69 and 17 appear to separate 3 from 8. Different subsets of features favour different partitions, which is exactly the pattern in Figure 2.
+So this is not a controlled comparison. The model, the information and the compute all differ. We report what each configuration did, not which approach is better.
 
-> This spatial story is a *proposed* explanation, not a demonstrated one. The "favouring/opposing" totals summarise raw weights, and they are not logit contributions because they ignore ReLU gating, biases and $$v_j$$. Turning this into a causal account requires measuring $$c_j(x)$$ on real digit examples and running targeted pixel and unit interventions.
+## Act 1: one long call guesses parity
 
-## Checking the story against the weights
+Astra received everything in one prompt: every weight, the conventions above, and one labelled image. The first attempt ran out of its 4,096-token output budget mid-reasoning and returned nothing. The second, with 32,768 tokens, completed. Astra correctly described the example as a handwritten zero and answered
 
-So I ran those checks myself, using the actual weights and the 50 sample images. The CSV only has binary labels, so I read each digit by eye. Every reading agrees with its label under the primes-plus-zero rule, except one scribble I couldn't identify, which I left out. Treat the per-digit numbers below as small-sample: there are only two 3s, for example.
+$$
+\text{class 1} = \{0,2,4,6,8\}, \qquad \text{class 0} = \{1,3,5,7,9\}
+$$
 
-**The network does what we said.** It classifies all 50 samples correctly, and the margins tell a story of their own:
+at 42% confidence, calling parity tentative. This was not a blind guess. It cited real weights, for example $$W_1[2,349] \approx -0.635$$ with $$v_2 \approx +0.478$$, and these values match the file. But parity places only 0, 1, 2 and 9 correctly. That's **4/10, below the 5/10 a random split gets on average.** Astra read the weights and then reached for the most familiar binary rule over digits.
 
-<figure>
-  <img src="{{ '/assets/img/fig5_logits.png' | relative_url }}" alt="Strip plot of logits by digit: class-1 digits all above zero, class-0 digits below; the closest calls are a 6 and an 8 just below zero and the lowest 5s and 7s">
-  <figcaption>Figure 5. Logit of every sample, grouped by digit. The closest calls are one 6 (−1.7) and one 8 (−0.5), and the smallest class-1 margins belong to 5 and 7.</figcaption>
-</figure>
+## Act 2: blind agents see a zero
 
-The digits the network finds hardest (5, 6, 7 and 8) are exactly the ones the agents argued about in Figure 2. The weights encode real ambiguity there, and the agents' disagreement seems to reflect it rather than noise.
+The agents started with no hints at all.
 
-**The blank-image default is real.** Plugging the biases into the formula above gives $$z(\mathbf{0}) \approx -0.99$$, so an empty canvas is class 0. Of the 128 hidden units, 56 have $$v_j < 0$$ and $$b_j > 0$$: they are on by default and push toward class 0 until ink switches them off. The ten strongest of them have biases between $$+0.10$$ and $$+0.20$$, matching what the agents reported.
-
-**Where the logit actually comes from.** Each ReLU acts as a switch: writing $$s_j(x) = \mathbb{1}[a_j(x) > 0]$$, unit $$j$$ outputs $$s_j(x)\,a_j(x)$$. The 128 hyperplanes $$a_j(x) = 0$$ cut the input space into polyhedral cells, and inside any one cell no unit changes state, so the network is exactly affine there: $$z(x) = W_2 S\,(W_1 x + b_1) + b_2$$ with $$S = \mathrm{diag}(s_j)$$ fixed. ReLU is still nonlinear overall, but its nonlinearity lives only on those cell boundaries. Because $$z$$ is affine within the cell containing $$x$$, the logit splits exactly, with no approximation, into per-pixel terms plus an input-dependent bias term: $$z(x) = x^\top \nabla_x z + \sum_j v_j\, s_j(x)\, b_j + b_2$$. Averaging the pixel term $$x \odot \nabla_x z$$ over each digit shows which strokes do the work:
-
-<figure>
-  <img src="{{ '/assets/img/fig6_attribution.png' | relative_url }}" alt="Ten small heatmaps, one per digit, showing which pixels push toward class 1 (blue) or class 0 (orange)">
-  <figcaption>Figure 6. Exact pixel attribution, averaged per digit. The top bar of a 7 and the upper arc of a 3 push hard toward class 1. A 1's central stroke and a 9's loop-to-stem junction push toward class 0.</figcaption>
-</figure>
-
-Two things stand out. The 7's top bar is one of the strongest class-1 cues in the network. The agents' upper-right "end of the 7's bar" region (R4) lies to the right of where the bars of these 7s actually end, and none of the 7s here put ink in it. And the central vertical band carries class-0 evidence for almost every digit, while the far-left edges are nearly empty.
-
-**Erasing the agents' regions.** For each region $$R$$ from Figure 3 (R1: rows 18–24, columns 1–5; R2: rows 6–9, columns 1–3; R3: rows 8–20, columns 13–15; R4: rows 1–3, columns 15–22, all inclusive), I set every pixel inside it to zero, $$\tilde X = M_R \odot X$$, re-ran the network, and recorded $$\Delta z = f(\tilde X) - f(X)$$:
-
-| Region | images with ink there | mean change in $$z$$ when erased | predictions flipped |
-|---|---|---|---|
-| R1 bottom-left (class-1 claim) | 6 / 50 | −0.7 | 0 |
-| R2 upper-left (class-1 claim) | 0 / 50 | — | 0 |
-| R3 central band (class-0 claim) | 50 / 50 | +3.7 (+13.5 for 1s) | 6 |
-| R4 upper-right (class-0 claim) | 6 / 50 | +0.5 | 0 |
-
-"Images with ink there" counts images with at least one nonzero pixel in the region, since erasing an already blank region changes nothing. The mean change is averaged over those images only (the "+13.5" over the 1s alone), and a flip is any image whose predicted class changes. A positive $$\Delta z$$ means the erased ink had been pushing toward class 0. One caveat: a digit with a block cut out of it is not quite natural handwriting, so this measures how the network responds to that edit rather than an absolute importance. The code is in `scripts/region_erasure.py`.
-
-The central band is confirmed as strong class-0 evidence: removing it raises the logit and flips six predictions. But the two far-left regions, the agents' headline class-1 evidence, barely contain ink in real digits. Their large weights are *structure in parameter space* that the data hardly ever activates. That is the general trap of reading weights without inputs: a template can be large where the input never goes.
-
-**The named units, tested.** Here is what the hidden units the agents singled out actually contribute on each digit:
+**Round 1** was a single agent working blind. It found that the strongest class-1 units share a distinctive shape: a narrow negative stroke flanked by positive weights. Its cross-section averaged about $$+0.03 / -0.25 / +0.03$$, which means "ink beside this line, but not on it". The class-0 units had positive biases and strongly negative weights, so they are on by default and switched off by ink. The agent then summed each unit's strongest lobes, weighted by its vote:
 
 <figure>
-  <img src="{{ '/assets/img/fig8_named_units.png' | relative_url }}" alt="Heatmap of mean logit contributions of nine named units across digits 0-9">
-  <figcaption>Figure 7. Mean contribution \(c_j(x)\) per digit for the units the agents named. All nine have \(v_j > 0\), so they can only push toward class 1.</figcaption>
+  <img src="{{ '/assets/img/f02_lobes.png' | relative_url }}" alt="Four heatmaps: class-1 units forbid ink in the centre and want it on a ring; class-0 units are switched off by ink on the same ring">
+  <figcaption>Figure 2. The agents' "lobe maps", reproduced from their script. Class-1 units want ink on a large ring (second panel) and forbid it in the middle (first). Ink on the same ring switches class-0 units off (third). A ring with an empty centre looks like a zero.</figcaption>
 </figure>
 
-The 3-vs-8 claim holds up well: units 69 and 17 contribute more than 2 to the logit on a 3 and about 0.1–0.2 on an 8. The 7 claims don't hold up. Unit 27 never fires on a 7, and units 23 and 96, said to "oppose" the 7's top bar, are among the 7's strongest *supporters*. Some of a unit's weights can sit negative on part of a stroke while the unit as a whole still fires for the digit.
+A ring of ink around an empty centre pushes toward class 1. The radial profile of $$T$$ agrees: about $$-1.3$$ near the centre and $$+0.94$$ at radius 12–14. The agent concluded "class 1 is the digit 0, on rotated data", at 55–65%.
 
-Finally, here is what the most influential units look for, shown as raw input templates:
+**Round 2** added an independent second opinion. A separate subagent, deliberately not told the first answer, made two findings:
+
+- **Exactly 67 pixels have never been trained**, matching the 67 pixels that are blank in every MNIST training image.
+- The mask of untrained pixels has no mirror or transpose symmetry, so the data was **not** rotated or flipped. This overturned the rotation claim.
+
+It too concluded "0 vs. all other digits", at about 65%. Two analyses, one of them unanchored, agreed. Their answer was wrong, but it wasn't foolish. The network really does reward a ring with an empty centre, because 0 really is in class 1. It just isn't the whole rule. This is the clearest lesson of the experiment: **a story can fit every feature you look at and still be wrong.**
+
+## Act 3: a two-bit hint and four angles
+
+The experimenter then told the agents one fact: **each class contains exactly five digits.** It is worth measuring how much information that is. Before the hint, any labelled split of ten digits into two nonempty classes was possible. After it, only the five-against-five ones remain:
+
+$$
+\log_2 \frac{2^{10} - 2}{\binom{10}{5}} = \log_2 \frac{1022}{252} \approx 2 \text{ bits}.
+$$
+
+Two bits immediately ruled out "0 vs. rest". A single agent then reread the same features as a five-against-five split and proposed parity, the same wrong answer as Astra, at about 55%. It flagged its own weakest link: one strong class-1 unit is switched off by a bar near row 16, roughly where a 4's crossbar sits.
+
+The final round was planned rather than improvised. Four main agents, each with three subagents, attacked the problem from different angles, all from the same brief:
+
+| Agent | Angle |
+|---|---|
+| A | **Training dynamics.** Under BCE, weight updates are sums of training images, so $$T$$ should resemble the mean class-1 image minus the mean class-0 image. |
+| B | **Unit by unit.** Read the ~40 strongest units as detectors for look-alike pairs on opposite sides, then score all 126 five-against-five splits. |
+| C | **Hypothesis critic.** List natural splits (0–4 vs. 5–9, primes, loops, curved vs. angular, …), predict what the weights should show for each, and try to refute them. |
+| D | **Digit by digit.** Match each digit's distinctive strokes to units and tally their votes. |
+
+Each agent reported a probability that each digit is in class 1. Here they are against the truth:
 
 <figure>
-  <img src="{{ '/assets/img/fig7_templates.png' | relative_url }}" alt="Eight 28x28 weight templates: four top class-1 units and four top class-0 units">
-  <figcaption>Figure 8. Input weights \(w_j\) of the four units contributing most to each class, ranked by mean contribution on the samples. Several are dominated by negative strokes, meaning they work by being switched <em>off</em> by ink in a specific place.</figcaption>
+  <img src="{{ '/assets/img/f03_agent_probs.png' | relative_url }}" alt="Grid of each agent's probability that each digit is in class 1, coloured from orange to blue, with wrong-side cells outlined and a Brier score per agent">
+  <figcaption>Figure 3. Each agent's P(digit in class 1). Dashed cells are on the wrong side of 0.5. The Brier score \(\frac{1}{10}\sum_d (p_d - g(d))^2\) is 0 for perfect answers and 0.25 for coin flips.</figcaption>
 </figure>
 
-They are not clean digit prototypes. They are distributed, partly inhibitory detectors, which is part of why reading this network from its weights alone is hard for a model and a person alike.
+All four agree on the easy part: 2 and 3 go to class 1, and 1 and 4 to class 0. Everything hard is concentrated in 5, 6, 7 and 8. The agents' top picks, together with every earlier answer, line up like this:
 
-## Were the agents smarter, or did they just do more?
+<figure>
+  <img src="{{ '/assets/img/f04_scoreboard.png' | relative_url }}" alt="Scoreboard of every answer: Astra and the single hinted agent 4/10, blind agents 6/10, agents A and D 8/10, B 6/10, C 10/10, the averaged final answer 6/10">
+  <figcaption>Figure 4. Every answer in the experiment, digit by digit. Agent C's top pick is exact. The system's final answer, from averaging the four, is B's split, scoring 6/10.</figcaption>
+</figure>
 
-Distributing the work plausibly helps. Different branches can look at different parts of the weights, keep competing hypotheses alive, and criticise each other instead of committing early to a familiar rule like parity. The spread of candidates in Figure 2 fits that picture.
+There is a lesson in how the final answer was chosen. Agent C was by far the best calibrated (Brier 0.111) and its top split is exactly right, although even C was close to a coin flip on 5 and 8. Agent B was *worse than a coin flip* (0.286), yet averaging the four probabilities produced B's split, {0, 2, 3, 6, 8}, at only 25–30% confidence. Averaging pulls the ensemble toward agents that are confidently wrong, and without the ground truth there is no way to know which agent to trust. The hint took the system from a wrong answer to candidates within one or two digits of the truth. It still did not let the system *choose* the right one.
 
-But this experiment doesn't isolate *organisation* as the cause. The agentic run may have used more tokens, tool calls, numerical scripts, different prompts, wider file access or more examples. Each of those could matter on its own. The fair framing is that we observed two inference configurations, not a controlled comparison. Making the causal claim requires a matched-access, matched-compute comparison, and that is the obvious next experiment.
+## The maths of reading weights
 
-Two of the agents' quantitative claims do check out against PyTorch's default initialisation, $$\mathcal{U}(-1/28, 1/28)$$ for a 784-input layer. Exactly 67 input pixels have every outgoing weight inside that range, and all 67 are blank in every sample. Hidden-unit weight norms average 3.06, against an expected 0.58 at initialisation, about 5.3×. Without the actual initial checkpoint these remain consistency checks rather than proofs, and blank-pixel patterns alone still don't uniquely identify MNIST.
+Why is it so hard to read this rule off the weights? Three pieces of maths explain most of it, and also explain several of the agents' best findings.
 
-## Takeaways
+### 1. Weights are made of training images
 
-1. **Domain recovery is easy-ish, rule recovery is hard.** A single call correctly read "handwritten digits" from raw weights and still got 6 of 10 digits wrong on the actual rule.
-2. **Familiar priors compete with evidence.** Parity is the first binary rule over digits most people (and models) think of, and the single call settled on it despite citing real weights.
-3. **Decomposition surfaced the right answer.** One of four agent branches recovered the exact partition. Aggregating across branches would not have chosen it.
-4. **Weights need inputs.** The agents' strongest class-1 evidence sat in pixels real digits almost never touch, and some named units do the opposite of what was claimed. Weight-only explanations should always be checked with activations on real data.
-5. **The next step is controls.** Match information and compute between single-call and agentic runs, and verify the spatial story with activation measurements and interventions.
+Write the per-example loss as $$\ell = \mathrm{BCE}(z, y)$$ and the error as $$e = \sigma(z) - y$$. For BCE, $$\partial \ell / \partial z = e$$, and from the definitions above
+
+$$
+\frac{\partial z}{\partial w_j} = v_j\, s_j(x)\, x .
+$$
+
+So each gradient step adds a multiple of an *input image* to $$w_j$$. Summing over training, with learning rate $$\eta$$:
+
+$$
+w_j^{(\text{end})} = w_j^{(0)} - \eta \sum_{\text{steps}} \sum_{n} e_n\, v_j\, s_j(x_n)\, x_n .
+$$
+
+**Every trained template is its initialisation plus a weighted sum of training images.** Three of the agents' findings follow directly.
+
+**Frozen pixels.** If pixel $$i$$ is blank in every training image, then $$x_{n,i} = 0$$ for all $$n$$. No update ever touches $$w_{j,i}$$, so it stays at its initial value. PyTorch initialises this layer from $$\mathcal{U}(-1/\sqrt{784}, 1/\sqrt{784}) = \mathcal{U}(-1/28, 1/28)$$. A pixel whose 128 weights all still lie within $$\pm 1/28$$ is therefore almost certainly a pixel that was never inked. The agents counted exactly 67 such pixels, the known MNIST number, and all 67 are blank in every one of our sample images. A dataset leaves a fingerprint in the weights.
+
+**Dead units.** If unit $$j$$ is off for every training image, then $$s_j(x_n) = 0$$ and the whole row never moves. Its output weight doesn't move either, because $$\partial z/\partial v_j = \max(0, a_j) = 0$$. Four units, 11, 38, 106 and 114, sit exactly at the norm expected at initialisation, $$\sqrt{784 \cdot (1/28)^2/3} \approx 0.58$$. Their output weights are still inside the initial range $$\pm 1/\sqrt{128} \approx 0.088$$, and none of them fires on any of our 50 images. Every other unit grew to about 5× its initial norm.
+
+<figure>
+  <img src="{{ '/assets/img/f05_frozen.png' | relative_url }}" alt="Left: the 67 frozen pixels at the corners and edges of the image. Right: weight norms of all 128 units; four sit at the initial value 0.58, the rest are around 3">
+  <figcaption>Figure 5. Two fingerprints of the training data. Left: the 67 pixels no image ever inked. Right: four units that never switched on and so never trained.</figcaption>
+</figure>
+
+**Hard examples dominate.** Agent A turned the formula into a prediction. Treating the $$v_j$$ as slowly varying and summing over units gives
+
+$$
+T = \sum_j v_j w_j \approx T^{(0)} - \eta \sum_n e_n \Big(\sum_j v_j^2\, s_j(x_n)\Big) x_n .
+$$
+
+Each image enters with weight proportional to its error $$e_n$$. Early in training every image has a large error, and $$T$$ resembles the mean class-1 image minus the mean class-0 image. But once an image is classified confidently, $$e_n \to 0$$ and it stops contributing. The final weights are therefore shaped by the *hard* images near the boundary, much like support vectors in an SVM. Agent A's approximation "$$T \approx$$ mean class-1 image − mean class-0 image" holds only weakly: on our samples the correlation is 0.12. **A well-trained network stores the differences between look-alike digits, not what each class looks like.** That is why "what does class 1 look like?" has no direct answer in the weights.
+
+### 2. Units are detectors with vetoes
+
+The "ink beside the line, but not on it" shape fits this picture. Split unit $$j$$'s pre-activation by region:
+
+$$
+a_j(x) = \underbrace{\sum_{i \in \text{flanks}} w_{j,i}\, x_i}_{\text{small positive weights, many pixels}} \;+\; \underbrace{\sum_{i \in \text{slit}} w_{j,i}\, x_i}_{\text{large negative weights, few pixels}} \;+\; b_j .
+$$
+
+Ink spread along the flanks slowly accumulates positive evidence, while a little ink in the slit vetoes the unit outright. On real data these units turn out to be sharp digit specialists, and the slit sits exactly where a look-alike digit would put ink:
+
+<figure>
+  <img src="{{ '/assets/img/f06_slits.png' | relative_url }}" alt="Ten weight templates of top class-1 units, each with the outline of the average digit it fires on: three 3-detectors, four 2-detectors, three 7-detectors">
+  <figcaption>Figure 6. The strongest class-1 units, each labelled with the digit it actually fires on and overlaid with that digit's average shape. The dark slits sit in the gaps the digit leaves open.</figcaption>
+</figure>
+
+Units 28, 61 and 69 are 3-detectors whose slits sit in the open left side of the 3, exactly where an 8 would close the loop. Unit 61 fires on none of our 8s. Units 63, 86, 100 and 46 detect 2s, and units 13, 30 and 102 detect 7s. Each unit encodes a *contrast* between a class-1 digit and its class-0 look-alike, as the training dynamics predicts.
+
+### 3. The network is piecewise linear, and the gates decide
+
+ReLU is nonlinear, but only at one point: it is the line of slope 0 for $$t \le 0$$ and the line of slope 1 for $$t > 0$$. Collect the gates into $$S(x) = \mathrm{diag}(s_1(x), \dots, s_{128}(x))$$. Then
+
+$$
+z(x) = W_2\, S(x)\,(W_1 x + b_1) + b_2 .
+$$
+
+The 128 hyperplanes $$a_j(x) = 0$$ cut the input space into convex cells. Inside any one cell no gate changes, $$S$$ is constant, and $$z$$ is **exactly affine**. All the nonlinearity lives on the cell walls. You can see this by walking in a straight line from one digit to another:
+
+<figure>
+  <img src="{{ '/assets/img/f08_kinks.png' | relative_url }}" alt="Logit along a straight path from a 7 to a 1: a piecewise-linear curve with 57 kinks, crossing zero around t = 0.6; below, the number of active units drops from about 63 to about 44">
+  <figcaption>Figure 7. The logit along the straight line from a 7 to a 1. Between kinks the curve is exactly straight. At each of the 57 kinks a unit switches on or off. The prediction flips from class 1 to class 0 around \(t \approx 0.6\).</figcaption>
+</figure>
+
+This matters for reading weights. Within the cell containing $$x$$, the gradient is
+
+$$
+\nabla_x z = \sum_j v_j\, s_j(x)\, w_j ,
+$$
+
+a vote-weighted sum of only the *active* units' templates. The agents' map $$T = \sum_j v_j w_j$$ is the same sum with **every** gate set to 1. A real image never switches on all the units:
+
+<figure>
+  <img src="{{ '/assets/img/f07_gating.png' | relative_url }}" alt="Left: histogram of active units per image, between 24 and 65, mean 47. Right: histogram of per-image correlation between T and the true gradient, mean 0.79; the correlation with the average gradient is 0.97">
+  <figcaption>Figure 8. Left: each image activates about 47 of 128 units. Right: the agents' map \(T\) matches the <em>average</em> gradient almost perfectly (0.97), but any single image's gradient less well (0.79 on average).</figcaption>
+</figure>
+
+$$T$$ is an excellent summary of where evidence lives *on average*. As a classifier it is useless: the "all units on" logit, $$x^\top T + \sum_j v_j b_j + b_2$$, predicts class 0 for all 50 images. **The decision is made by which units switch on, and that depends on the input.** Weights alone can't show which gates a given digit opens. This is the deepest reason the agents could recover the network's general structure but not its exact rule.
+
+## Checking the agents against the network
+
+Everything so far used only the weights. Now we break the agents' rules on purpose. We ran the network on the 50 sample images and checked their claims against its real behaviour. The sample file has only binary labels, so we read each digit by eye. Every reading agrees with its label under the primes-plus-zero rule, except one scribble we could not identify and left out. With only a few images per digit, treat per-digit numbers as small-sample.
+
+**The network does what we said, and its hard digits are the agents' hard digits.** It classifies all 50 correctly. The closest calls are a 6 and an 8 just below zero, and the smallest class-1 margins belong to 5 and 7:
+
+<figure>
+  <img src="{{ '/assets/img/f09_margins.png' | relative_url }}" alt="Logits of all 50 samples grouped by digit: class-1 digits above zero, class-0 below; closest calls are one 6 and one 8">
+  <figcaption>Figure 9. The logit of every sample, grouped by digit. The digits nearest the boundary (5, 6, 7, 8) are the ones the agents disagreed on.</figcaption>
+</figure>
+
+**Class 0 is the default.** For a blank image, $$z(\mathbf{0}) = \sum_j v_j \max(0, b_j) + b_2 \approx -0.99$$. Of the 128 units, 56 have $$v_j < 0$$ and $$b_j > 0$$: they are on for an empty canvas and push toward class 0 until ink switches them off. The agents' account of class-0 units as "on by default" is confirmed.
+
+**One decision, unit by unit.** Because $$z = \sum_j c_j(x) + b_2$$ exactly, we can watch a single decision being assembled:
+
+<figure>
+  <img src="{{ '/assets/img/f11_waterfall.png' | relative_url }}" alt="Waterfall of the logit for one handwritten 3: output bias, then the largest positive and negative unit contributions, summing to z = 9.37">
+  <figcaption>Figure 10. How the network reaches \(z = 9.37\) for one 3. Only 47 units are active, and a handful of 3-specialists (units 17, 96, 69) do most of the work against several class-0 units.</figcaption>
+</figure>
+
+**Which pixels do the work.** Inside a cell the network is affine, so the logit splits exactly, with no approximation, into per-pixel terms plus a bias term:
+
+$$
+z(x) = \sum_i x_i\, [\nabla_x z]_i \;+\; \sum_j v_j\, s_j(x)\, b_j + b_2 .
+$$
+
+(With a smooth activation like tanh, "gradient × input" would only be a local linear approximation.) Averaging the pixel term over each digit:
+
+<figure>
+  <img src="{{ '/assets/img/f10_attribution.png' | relative_url }}" alt="Ten heatmaps, one per digit, showing pixels pushing toward class 1 in blue and class 0 in orange">
+  <figcaption>Figure 11. Exact pixel attribution, averaged per digit. The 7's top bar and the 3's upper arc push hard toward class 1. A 1's central stroke and a 9's loop-to-stem junction push toward class 0.</figcaption>
+</figure>
+
+**The agents' regions, erased.** The agents summarised the weights in five regions using a voting rule. For each region, they summed $$\lvert v_j \rvert$$ over units whose mean weight there is above $$+0.02$$ ("want ink") or below $$-0.02$$ ("forbid ink"). We then tested each region directly. For every image, we set the region's pixels to zero, $$\tilde X = M_R \odot X$$, re-ran the network, and recorded $$\Delta z = f(\tilde X) - f(X)$$.
+
+| Region (rows, cols, inclusive) | Class-1 units want / forbid | Class-0 units want / forbid | Images with ink there | Mean $$\Delta z$$ when erased | Predictions flipped |
+|---|---|---|---|---|---|
+| R1 far bottom-left (19–24, 1–5) | 32.3 / 0.8 | 0.0 / 15.4 | 6 / 50 | −0.7 | 0 |
+| R2 centre column (8–20, 13–15) | 3.9 / 18.1 | 6.2 / 2.9 | 50 / 50 | +3.7 (+13.5 for 1s) | 6 |
+| R3 very top-right (1–3, 15–22) | 3.1 / 26.6 | 9.5 / 1.8 | 6 / 50 | +0.5 | 0 |
+| R4 left-mid band (10–13, 2–15) | 5.0 / 22.7 | 0.7 / 11.0 | 48 / 50 | +6.6 | 10 |
+| R5 lower-left loop (16–20, 7–11) | 8.1 / 19.5 | 6.3 / 6.1 | 41 / 50 | +1.5 | 2 |
+
+The mean change is averaged over the images that have ink in the region, since erasing a blank region changes nothing. A flip is any image whose predicted class changes. A positive $$\Delta z$$ means the erased ink had been pushing toward class 0. One caveat: a digit with a block cut out of it is not natural handwriting, so this measures the network's response to that edit rather than an absolute "importance".
+
+<figure>
+  <img src="{{ '/assets/img/f12_regions.png' | relative_url }}" alt="Left: the five regions drawn over the mean digit. Middle: net weight vote per region. Right: the effect of erasing each region; the far bottom-left and top-right barely matter, the left-mid band matters most">
+  <figcaption>Figure 12. What the weights say about each region (middle) against what erasing it actually does (right, plotted as \(-\Delta z\) so both panels point toward the class the ink supports).</figcaption>
+</figure>
+
+The comparison is instructive. The weights point the right way in every region, but their *strength* is a poor guide:
+
+- **R1, the far bottom-left**, has the agents' largest weight vote, by far. Yet only 6 of 50 real digits put ink there, so it barely affects decisions. **R3, the top-right**, is the same story.
+- **R4, the left-mid band**, has one of the *weakest* votes but is the region that matters most. Erasing it raises the logit by 6.6 on average and flips 10 predictions. This is where a 4's crossbar and the bottom of a 9's loop sit.
+
+Large weights in places the data never reaches are invisible to the network's actual decisions. That is the trap of reading weights without inputs.
+
+**The units the agents named.** Our first write-up named specific units as evidence. Testing them:
+
+<figure>
+  <img src="{{ '/assets/img/f13_named_units.png' | relative_url }}" alt="Heatmap of mean contribution per digit for nine named units: units 69 and 17 fire strongly on 3s; units 23 and 96 support 7s; unit 27 never fires on 7s">
+  <figcaption>Figure 13. Mean contribution \(c_j(x)\) per digit for the units named as evidence. All nine have \(v_j > 0\), so each can only push toward class 1.</figcaption>
+</figure>
+
+The 3-vs-8 claim holds up: units 69 and 17 contribute more than 2 to the logit on a 3 and about 0.1–0.2 on an 8. The 7 claims do not. Unit 27 never fires on a 7, and units 23 and 96, said to oppose the 7's top bar, are among the 7's strongest supporters. A unit can have negative weights on part of a stroke and still fire for the digit as a whole.
+
+## What we learned
+
+**1. Structure is readable; the rule mostly isn't.** From weights alone, the agents recovered a lot:
+
+- the dataset, from the 67 frozen pixels;
+- that the data was not augmented, from the mask's asymmetry;
+- the four dead units;
+- the default class;
+- the families of detectors.
+
+The maths says why the exact rule stays hidden. Trained weights encode error-weighted *differences* between look-alike digits, and the decision depends on which gates an input opens, which no weight shows on its own.
+
+**2. A coherent story is not a correct one.** "A ring with an empty centre, so it's 0" fit every feature the blind agents looked at, and two independent analyses converged on it. Parity convinced both Astra and a hinted agent. Familiar answers are attractive even when evidence points elsewhere.
+
+**3. Hints are data, and must be reported.** Two bits of information, "five digits per class", changed the outcome more than any amount of analysis. Any claim about what an LLM can read from weights has to state exactly what it was told.
+
+**4. Ensembles need calibration, not just averaging.** The best-calibrated agent was right and the worst was worse than chance. Averaging chose the worst agent's answer.
+
+**5. Check weight-reading against inputs.** Every weight-based claim we tested had a simple behavioural test, and several failed it. Explanations from weights are hypotheses until activations on real data confirm them.
+
+**What a fair comparison would need.** Same model for single-call and agentic runs, same information (hint or no hint, example or no example), matched compute budgets, and several random seeds for both the network and the agents. We'd also want to know whether calibration-weighted aggregation, or a critic that tests each agent's specific claims, would have selected agent C.
 
 ## Reproducibility
 
-We keep the model weights, the 50 samples (with the by-eye digit readings used above), the selected example, prompt hashes, and the direct API requests and responses. A fully reproducible agentic comparison would also need every agent prompt, tool trace, inter-branch message, token count and aggregation rule, and we plan to log all of these in follow-up runs so that the effects of decomposition, extra compute and information access can be separated.
+Everything in this post can be regenerated from the files in the [repository](https://github.com/Vandit-iisc):
+
+- `scripts/make_figures.py` builds every figure from `data/weights.txt` and `data/sample50.csv`.
+- `scripts/region_erasure.py` prints the region table above.
+- `scripts/digits.py` holds our by-eye digit readings.
+- `agents/` contains the agents' own weights-only analysis script and the shared brief for the four-agent round, which states the hint explicitly.
+
+We also keep the Astra prompt and responses. A fuller record would include every agent and subagent transcript, tool trace and token count, so that the effects of decomposition, extra compute and extra information could be separated.
 
 *Written with Prayalankar and Prathosh AP. Comments and pointers to related work are welcome. Open an issue on [GitHub](https://github.com/Vandit-iisc).*

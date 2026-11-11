@@ -12,4 +12,4 @@ kramdown:
   syntax_highlighter: rouge
 
 permalink: /blog/:year/:month/:title/
-exclude: [README.md, scripts, data]
+exclude: [README.md, scripts, data, agents]
