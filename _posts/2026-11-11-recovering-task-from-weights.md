@@ -2,7 +2,7 @@
 layout: post
 title: "Can an LLM Read a Neural Network? Recovering a Classifier's Task from Its Weights"
 description: "We handed GPT-6 Astra the raw weights of a small MLP and asked what it was trained to do. A single call guessed parity. A team of agents found the real rule."
-authors: Vandit Patel, Prayalankar, Prathosh AP
+authors: Vandit Patel(IISc), Prayalankar(Stryker AI Research), Prathosh AP(IISc)
 ---
 
 Suppose I give you a file of 100,609 floating-point numbers and tell you they are the weights of a small network that takes a 28×28 grayscale image and outputs a single bit. Nothing else: no training data, no labels, no description of the task. Could you tell me what the network was trained to do?
