@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Can an LLM Read a Neural Network? Recovering a Classifier's Task from Its Weights"
+title: "Can a LLM Read a Neural Network? Recovering a Classifier's Task from Its Weights"
 description: "We gave LLMs the raw weights of a small digit classifier and asked what it was trained to do. The wrong answers, a two-bit hint, and the maths of why weights are hard to read."
 authors:
   - name: Vandit Patel
