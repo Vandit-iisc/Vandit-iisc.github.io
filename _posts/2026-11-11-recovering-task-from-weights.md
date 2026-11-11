@@ -128,7 +128,7 @@ The digits the network finds hardest (5, 6, 7 and 8) are exactly the ones the ag
 
 **The blank-image default is real.** Plugging the biases into the formula above gives $$z(\mathbf{0}) \approx -0.99$$, so an empty canvas is class 0. Of the 128 hidden units, 56 have $$v_j < 0$$ and $$b_j > 0$$: they are on by default and push toward class 0 until ink switches them off. The ten strongest of them have biases between $$+0.10$$ and $$+0.20$$, matching what the agents reported.
 
-**Where the logit actually comes from.** Because the network is piecewise linear, the logit splits exactly into per-pixel terms: $$z(x) = x^\top \nabla_x z + \sum_j v_j \mathbb{1}[a_j > 0]\, b_j + b_2$$. Averaging the pixel term $$x \odot \nabla_x z$$ over each digit shows which strokes do the work:
+**Where the logit actually comes from.** Each ReLU acts as a switch: writing $$s_j(x) = \mathbb{1}[a_j(x) > 0]$$, unit $$j$$ outputs $$s_j(x)\,a_j(x)$$. The 128 hyperplanes $$a_j(x) = 0$$ cut the input space into polyhedral cells, and inside any one cell no unit changes state, so the network is exactly affine there: $$z(x) = W_2 S\,(W_1 x + b_1) + b_2$$ with $$S = \mathrm{diag}(s_j)$$ fixed. ReLU is still nonlinear overall, but its nonlinearity lives only on those cell boundaries. Because $$z$$ is affine within the cell containing $$x$$, the logit splits exactly, with no approximation, into per-pixel terms plus an input-dependent bias term: $$z(x) = x^\top \nabla_x z + \sum_j v_j\, s_j(x)\, b_j + b_2$$. Averaging the pixel term $$x \odot \nabla_x z$$ over each digit shows which strokes do the work:
 
 <figure>
   <img src="{{ '/assets/img/fig6_attribution.png' | relative_url }}" alt="Ten small heatmaps, one per digit, showing which pixels push toward class 1 (blue) or class 0 (orange)">
@@ -137,7 +137,7 @@ The digits the network finds hardest (5, 6, 7 and 8) are exactly the ones the ag
 
 Two things stand out. The 7's top bar is one of the strongest class-1 cues in the network. The agents' upper-right "end of the 7's bar" region (R4) lies to the right of where the bars of these 7s actually end, and none of the 7s here put ink in it. And the central vertical band carries class-0 evidence for almost every digit, while the far-left edges are nearly empty.
 
-**Erasing the agents' regions.** I zeroed out each region from Figure 3 in every image and re-ran the network:
+**Erasing the agents' regions.** For each region $$R$$ from Figure 3 (R1: rows 18–24, columns 1–5; R2: rows 6–9, columns 1–3; R3: rows 8–20, columns 13–15; R4: rows 1–3, columns 15–22, all inclusive), I set every pixel inside it to zero, $$\tilde X = M_R \odot X$$, re-ran the network, and recorded $$\Delta z = f(\tilde X) - f(X)$$:
 
 | Region | images with ink there | mean change in $$z$$ when erased | predictions flipped |
 |---|---|---|---|
@@ -145,6 +145,8 @@ Two things stand out. The 7's top bar is one of the strongest class-1 cues in th
 | R2 upper-left (class-1 claim) | 0 / 50 | — | 0 |
 | R3 central band (class-0 claim) | 50 / 50 | +3.7 (+13.5 for 1s) | 6 |
 | R4 upper-right (class-0 claim) | 6 / 50 | +0.5 | 0 |
+
+"Images with ink there" counts images with at least one nonzero pixel in the region, since erasing an already blank region changes nothing. The mean change is averaged over those images only (the "+13.5" over the 1s alone), and a flip is any image whose predicted class changes. A positive $$\Delta z$$ means the erased ink had been pushing toward class 0. One caveat: a digit with a block cut out of it is not quite natural handwriting, so this measures how the network responds to that edit rather than an absolute importance. The code is in `scripts/region_erasure.py`.
 
 The central band is confirmed as strong class-0 evidence: removing it raises the logit and flips six predictions. But the two far-left regions, the agents' headline class-1 evidence, barely contain ink in real digits. Their large weights are *structure in parameter space* that the data hardly ever activates. That is the general trap of reading weights without inputs: a template can be large where the input never goes.
 
