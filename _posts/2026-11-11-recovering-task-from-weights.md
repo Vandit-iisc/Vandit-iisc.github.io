@@ -24,7 +24,7 @@ This post tells that story in order, including the wrong turns, which turned out
 3. [Act 1: one long call guesses parity](#act-1-one-long-call-guesses-parity)
 4. [Act 2: blind agents see a zero](#act-2-blind-agents-see-a-zero)
 5. [Act 3: a two-bit hint and four angles](#act-3-a-two-bit-hint-and-four-angles)
-6. [The maths of reading weights](#the-maths-of-reading-weights)
+6. [reading weights](#reading-weights)
 7. [Checking the agents against the network](#checking-the-agents-against-the-network)
 8. [What we learned](#what-we-learned)
 
@@ -114,11 +114,11 @@ A ring of ink around an empty centre pushes toward class 1. The radial profile o
 - **Exactly 67 pixels have never been trained**, matching the 67 pixels that are blank in every MNIST training image.
 - The mask of untrained pixels has no mirror or transpose symmetry, so the data was **not** rotated or flipped. This overturned the rotation claim.
 
-It too concluded "0 vs. all other digits", at about 65%. Two analyses, one of them unanchored, agreed. Their answer was wrong, but it wasn't foolish. The network really does reward a ring with an empty centre, because 0 really is in class 1. It just isn't the whole rule. This is the clearest lesson of the experiment: **a story can fit every feature you look at and still be wrong.**
+It too concluded "0 vs. all other digits", at about 65%. The network really does reward a ring with an empty centre, because 0 really is in class 1. It just isn't the whole rule. 
 
 ## Act 3: a two-bit hint and four angles
 
-The experimenter then told the agents one fact: **each class contains exactly five digits.** It is worth measuring how much information that is. Before the hint, any labelled split of ten digits into two nonempty classes was possible. After it, only the five-against-five ones remain:
+We then told the agents one fact: **each class contains exactly five digits.** It is worth measuring how much information that is. Before the hint, any labelled split of ten digits into two nonempty classes was possible. After it, only the five-against-five ones remain:
 
 $$
 \log_2 \frac{2^{10} - 2}{\binom{10}{5}} = \log_2 \frac{1022}{252} \approx 2 \text{ bits}.
@@ -151,9 +151,9 @@ All four agree on the easy part: 2 and 3 go to class 1, and 1 and 4 to class 0. 
 
 There is a lesson in how the final answer was chosen. Agent C was by far the best calibrated (Brier 0.111) and its top split is exactly right, although even C was close to a coin flip on 5 and 8. Agent B was *worse than a coin flip* (0.286), yet averaging the four probabilities produced B's split, {0, 2, 3, 6, 8}, at only 25–30% confidence. Averaging pulls the ensemble toward agents that are confidently wrong, and without the ground truth there is no way to know which agent to trust. The hint took the system from a wrong answer to candidates within one or two digits of the truth. It still did not let the system *choose* the right one.
 
-## The maths of reading weights
+## Reading weights
 
-Why is it so hard to read this rule off the weights? Three pieces of maths explain most of it, and also explain several of the agents' best findings.
+Why is it so hard to read this rule off the weights? 
 
 ### 1. Weights are made of training images
 
@@ -305,7 +305,7 @@ The 3-vs-8 claim holds up: units 69 and 17 contribute more than 2 to the logit o
 
 ## What we learned
 
-**1. Structure is readable; the rule mostly isn't.** From weights alone, the agents recovered a lot:
+**1. The overall structure is readable but the underlying rule that governs the neural network is not** From weights alone, the agents recovered a lot:
 
 - the dataset, from the 67 frozen pixels;
 - that the data was not augmented, from the mask's asymmetry;
@@ -317,9 +317,9 @@ The maths says why the exact rule stays hidden. Trained weights encode error-wei
 
 **2. A coherent story is not a correct one.** "A ring with an empty centre, so it's 0" fit every feature the blind agents looked at, and two independent analyses converged on it. Parity convinced both Astra and a hinted agent. Familiar answers are attractive even when evidence points elsewhere.
 
-**3. Hints are data, and must be reported.** Two bits of information, "five digits per class", changed the outcome more than any amount of analysis. Any claim about what an LLM can read from weights has to state exactly what it was told.
+**3. Hints are data and that changes the prediction** Two bits of information, "five digits per class", changed the outcome more than any amount of analysis. Any claim about what an LLM can read from weights has to state exactly what it was told.
 
-**4. Ensembles need calibration, not just averaging.** The best-calibrated agent was right and the worst was worse than chance. Averaging chose the worst agent's answer.
+**4. We cant always average out all the agents answer** The best-calibrated agent was right and the worst was worse than chance. Averaging chose the worst agent's answer.
 
 **5. Check weight-reading against inputs.** Every weight-based claim we tested had a simple behavioural test, and several failed it. Explanations from weights are hypotheses until activations on real data confirm them.
 
