@@ -5,8 +5,6 @@ description: "We gave LLMs the raw weights of a small digit classifier and asked
 authors:
   - name: Vandit Patel
     affiliation: (Indian Institute of Science)
-  - name: Prayalankar
-    affiliation: 
   - name: Prathosh AP
     affiliation: (Indian Institute of Science)
 ---
