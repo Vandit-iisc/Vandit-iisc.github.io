@@ -34,9 +34,9 @@ This post tells that story in order, including the wrong turns, which turned out
 
 The idea comes from the *Weight-Space Programming* experiments by Takehi, Teoh, Zhang and Khattab (MIT CSAIL). There, LLMs inspect, describe and edit neural-network parameters directly. In one experiment, an LLM reads the weights of a game-playing policy and names the game. We ask the same question of a much plainer object:
 
-<figure>
-  <img src="{{ '/assets/img/f01_pipeline.png' | relative_url }}" alt="Pipeline: 28x28 image, flattened to 784 inputs, 128 ReLU hidden units, one raw logit, thresholded at zero">
-  <figcaption>Figure 1. The classifier: one hidden layer of 128 ReLU units and a single output logit.</figcaption>
+<figure class="text-center my-4">
+  <img class="img-fluid rounded" loading="lazy" src="{{ '/assets/img/f01_pipeline.png' | relative_url }}" alt="Pipeline: 28x28 image, flattened to 784 inputs, 128 ReLU hidden units, one raw logit, thresholded at zero">
+  <figcaption class="caption">Figure 1. The classifier: one hidden layer of 128 ReLU units and a single output logit.</figcaption>
 </figure>
 
 With $$x = \mathrm{vec}(X/255) \in \mathbb{R}^{784}$$, the network computes
@@ -104,9 +104,9 @@ The agents started with no hints at all.
 
 **Round 1** was a single agent working blind. It found that the strongest class-1 units share a distinctive shape: a narrow negative stroke flanked by positive weights. Its cross-section averaged about $$+0.03 / -0.25 / +0.03$$, which means "ink beside this line, but not on it". The class-0 units had positive biases and strongly negative weights, so they are on by default and switched off by ink. The agent then summed each unit's strongest lobes, weighted by its vote:
 
-<figure>
-  <img src="{{ '/assets/img/f02_lobes.png' | relative_url }}" alt="Four heatmaps: class-1 units forbid ink in the centre and want it on a ring; class-0 units are switched off by ink on the same ring">
-  <figcaption>Figure 2. The agents' "lobe maps", reproduced from their script. Class-1 units want ink on a large ring (second panel) and forbid it in the middle (first). Ink on the same ring switches class-0 units off (third). A ring with an empty centre looks like a zero.</figcaption>
+<figure class="text-center my-4">
+  <img class="img-fluid rounded" loading="lazy" src="{{ '/assets/img/f02_lobes.png' | relative_url }}" alt="Four heatmaps: class-1 units forbid ink in the centre and want it on a ring; class-0 units are switched off by ink on the same ring">
+  <figcaption class="caption">Figure 2. The agents' "lobe maps", reproduced from their script. Class-1 units want ink on a large ring (second panel) and forbid it in the middle (first). Ink on the same ring switches class-0 units off (third). A ring with an empty centre looks like a zero.</figcaption>
 </figure>
 
 A ring of ink around an empty centre pushes toward class 1. The radial profile of $$T$$ agrees: about $$-1.3$$ near the centre and $$+0.94$$ at radius 12–14. The agent concluded "class 1 is the digit 0, on rotated data", at 55–65%.
@@ -139,16 +139,16 @@ The final round was planned rather than improvised. Four main agents, each with 
 
 Each agent reported a probability that each digit is in class 1. Here they are against the truth:
 
-<figure>
-  <img src="{{ '/assets/img/f03_agent_probs.png' | relative_url }}" alt="Grid of each agent's probability that each digit is in class 1, coloured from orange to blue, with wrong-side cells outlined and a Brier score per agent">
-  <figcaption>Figure 3. Each agent's P(digit in class 1). Dashed cells are on the wrong side of 0.5. The Brier score \(\frac{1}{10}\sum_d (p_d - g(d))^2\) is 0 for perfect answers and 0.25 for coin flips.</figcaption>
+<figure class="text-center my-4">
+  <img class="img-fluid rounded" loading="lazy" src="{{ '/assets/img/f03_agent_probs.png' | relative_url }}" alt="Grid of each agent's probability that each digit is in class 1, coloured from orange to blue, with wrong-side cells outlined and a Brier score per agent">
+  <figcaption class="caption">Figure 3. Each agent's P(digit in class 1). Dashed cells are on the wrong side of 0.5. The Brier score \(\frac{1}{10}\sum_d (p_d - g(d))^2\) is 0 for perfect answers and 0.25 for coin flips.</figcaption>
 </figure>
 
 All four agree on the easy part: 2 and 3 go to class 1, and 1 and 4 to class 0. Everything hard is concentrated in 5, 6, 7 and 8. The agents' top picks, together with every earlier answer, line up like this:
 
-<figure>
-  <img src="{{ '/assets/img/f04_scoreboard.png' | relative_url }}" alt="Scoreboard of every answer: Astra and the single hinted agent 4/10, blind agents 6/10, agents A and D 8/10, B 6/10, C 10/10, the averaged final answer 6/10">
-  <figcaption>Figure 4. Every answer in the experiment, digit by digit. Agent C's top pick is exact. The system's final answer, from averaging the four, is B's split, scoring 6/10.</figcaption>
+<figure class="text-center my-4">
+  <img class="img-fluid rounded" loading="lazy" src="{{ '/assets/img/f04_scoreboard.png' | relative_url }}" alt="Scoreboard of every answer: Astra and the single hinted agent 4/10, blind agents 6/10, agents A and D 8/10, B 6/10, C 10/10, the averaged final answer 6/10">
+  <figcaption class="caption">Figure 4. Every answer in the experiment, digit by digit. Agent C's top pick is exact. The system's final answer, from averaging the four, is B's split, scoring 6/10.</figcaption>
 </figure>
 
 There is a lesson in how the final answer was chosen. Agent C was by far the best calibrated (Brier 0.111) and its top split is exactly right, although even C was close to a coin flip on 5 and 8. Agent B was *worse than a coin flip* (0.286), yet averaging the four probabilities produced B's split, {0, 2, 3, 6, 8}, at only 25–30% confidence. Averaging pulls the ensemble toward agents that are confidently wrong, and without the ground truth there is no way to know which agent to trust. The hint took the system from a wrong answer to candidates within one or two digits of the truth. It still did not let the system *choose* the right one.
@@ -179,9 +179,9 @@ $$
 
 **Dead units.** If unit $$j$$ is off for every training image at every step of training, then $$s_j(x_n) = 0$$ throughout, its gradient is always zero, and the whole row never moves. Its output weight doesn't move either, because $$\partial z/\partial v_j = \max(0, a_j) = 0$$. Four units, 11, 38, 106 and 114, sit exactly at the norm expected at initialisation, $$\sqrt{784 \cdot (1/28)^2/3} \approx 0.58$$. Their output weights are still inside the initial range $$\pm 1/\sqrt{128} \approx 0.088$$, and none of them fires on any of our 50 images. Every other unit grew well beyond its initial norm: by a median of about 5.6×, ranging from 2.3× to 9.1×.
 
-<figure>
-  <img src="{{ '/assets/img/f05_frozen.png' | relative_url }}" alt="Left: the 67 frozen pixels at the corners and edges of the image. Right: weight norms of all 128 units; four sit at the initial value 0.58, the rest are around 3">
-  <figcaption>Figure 5. Two fingerprints of the training data. Left: the 67 pixels no image ever inked. Right: four units that never switched on and so never trained.</figcaption>
+<figure class="text-center my-4">
+  <img class="img-fluid rounded" loading="lazy" src="{{ '/assets/img/f05_frozen.png' | relative_url }}" alt="Left: the 67 frozen pixels at the corners and edges of the image. Right: weight norms of all 128 units; four sit at the initial value 0.58, the rest are around 3">
+  <figcaption class="caption">Figure 5. Two fingerprints of the training data. Left: the 67 pixels no image ever inked. Right: four units that never switched on and so never trained.</figcaption>
 </figure>
 
 **Hard examples dominate.** Agent A turned this into a prediction. As a heuristic, ignore Adam's averaging, treat the $$v_j$$ as slowly varying, and sum over units:
@@ -202,9 +202,9 @@ $$
 
 Ink spread along the flanks slowly accumulates positive evidence, while a little ink in the slit vetoes the unit outright. On real data these units turn out to be sharp digit specialists, and the slit sits exactly where a look-alike digit would put ink:
 
-<figure>
-  <img src="{{ '/assets/img/f06_slits.png' | relative_url }}" alt="Ten weight templates of top class-1 units, each with the outline of the average digit it fires on: three 3-detectors, four 2-detectors, three 7-detectors">
-  <figcaption>Figure 6. The strongest class-1 units, each labelled with the digit it actually fires on and overlaid with that digit's average shape. The dark slits sit in the gaps the digit leaves open.</figcaption>
+<figure class="text-center my-4">
+  <img class="img-fluid rounded" loading="lazy" src="{{ '/assets/img/f06_slits.png' | relative_url }}" alt="Ten weight templates of top class-1 units, each with the outline of the average digit it fires on: three 3-detectors, four 2-detectors, three 7-detectors">
+  <figcaption class="caption">Figure 6. The strongest class-1 units, each labelled with the digit it actually fires on and overlaid with that digit's average shape. The dark slits sit in the gaps the digit leaves open.</figcaption>
 </figure>
 
 Units 28, 61 and 69 are 3-detectors whose slits sit in the open left side of the 3, roughly where an 8 would close the loop. Unit 61 fires on none of our five 8s, and units 28 and 69 each fire on only one. Units 63, 86, 100 and 46 detect 2s, and units 13, 30 and 102 detect 7s. Each unit encodes a *contrast* between a class-1 digit and its class-0 look-alike, as the training dynamics predicts.
@@ -219,9 +219,9 @@ $$
 
 The 128 hyperplanes $$a_j(x) = 0$$ cut the input space into convex cells. Inside any one cell no gate changes, $$S$$ is constant, and $$z$$ is **exactly affine**. All the nonlinearity lives on the cell walls. You can see this by walking in a straight line from one digit to another:
 
-<figure>
-  <img src="{{ '/assets/img/f08_kinks.png' | relative_url }}" alt="Logit along a straight path from a 7 to a 1: a piecewise-linear curve with 57 kinks, crossing zero around t = 0.6; below, the number of active units drops from about 63 to about 44">
-  <figcaption>Figure 7. The logit along the straight line from a 7 to a 1. Between kinks the curve is exactly straight. At each of the 57 kinks a unit switches on or off. The prediction flips from class 1 to class 0 around \(t \approx 0.6\).</figcaption>
+<figure class="text-center my-4">
+  <img class="img-fluid rounded" loading="lazy" src="{{ '/assets/img/f08_kinks.png' | relative_url }}" alt="Logit along a straight path from a 7 to a 1: a piecewise-linear curve with 57 kinks, crossing zero around t = 0.6; below, the number of active units drops from about 63 to about 44">
+  <figcaption class="caption">Figure 7. The logit along the straight line from a 7 to a 1. Between kinks the curve is exactly straight. At each of the 57 kinks a unit switches on or off. The prediction flips from class 1 to class 0 around \(t \approx 0.6\).</figcaption>
 </figure>
 
 This matters for reading weights. Within the cell containing $$x$$, the gradient is
@@ -232,9 +232,9 @@ $$
 
 a vote-weighted sum of only the *active* units' templates. The agents' map $$T = \sum_j v_j w_j$$ is the same sum with **every** gate set to 1. A real image never switches on all the units:
 
-<figure>
-  <img src="{{ '/assets/img/f07_gating.png' | relative_url }}" alt="Left: histogram of active units per image, between 24 and 65, mean 47. Right: histogram of per-image correlation between T and the true gradient, mean 0.79; the correlation with the average gradient is 0.97">
-  <figcaption>Figure 8. Left: each image activates about 47 of 128 units. Right: the agents' map \(T\) matches the <em>average</em> gradient almost perfectly (0.97), but any single image's gradient less well (0.79 on average).</figcaption>
+<figure class="text-center my-4">
+  <img class="img-fluid rounded" loading="lazy" src="{{ '/assets/img/f07_gating.png' | relative_url }}" alt="Left: histogram of active units per image, between 24 and 65, mean 47. Right: histogram of per-image correlation between T and the true gradient, mean 0.79; the correlation with the average gradient is 0.97">
+  <figcaption class="caption">Figure 8. Left: each image activates about 47 of 128 units. Right: the agents' map \(T\) matches the <em>average</em> gradient almost perfectly (0.97), but any single image's gradient less well (0.79 on average).</figcaption>
 </figure>
 
 $$T$$ is an excellent summary of where evidence lives *on average*. As a classifier it is useless: the "all units on" logit, $$x^\top T + \sum_j v_j b_j + b_2$$, predicts class 0 for all 50 images. **The decision is made by which units switch on, and that depends on the input.** Weights alone can't show which gates a given digit opens. This is the deepest reason the agents could recover the network's general structure but not its exact rule.
@@ -245,18 +245,18 @@ Everything so far used only the weights. Now we break the agents' rules on purpo
 
 **The network does what we said, and its hard digits are the agents' hard digits.** It classifies all 50 correctly. The closest calls are a 6 and an 8 just below zero, and the smallest class-1 margins belong to 5 and 7:
 
-<figure>
-  <img src="{{ '/assets/img/f09_margins.png' | relative_url }}" alt="Logits of all 50 samples grouped by digit: class-1 digits above zero, class-0 below; closest calls are one 6 and one 8">
-  <figcaption>Figure 9. The logit of every sample, grouped by digit. The digits nearest the boundary (5, 6, 7, 8) are the ones the agents disagreed on.</figcaption>
+<figure class="text-center my-4">
+  <img class="img-fluid rounded" loading="lazy" src="{{ '/assets/img/f09_margins.png' | relative_url }}" alt="Logits of all 50 samples grouped by digit: class-1 digits above zero, class-0 below; closest calls are one 6 and one 8">
+  <figcaption class="caption">Figure 9. The logit of every sample, grouped by digit. The digits nearest the boundary (5, 6, 7, 8) are the ones the agents disagreed on.</figcaption>
 </figure>
 
 **Class 0 is the default.** For a blank image, $$z(\mathbf{0}) = \sum_j v_j \max(0, b_j) + b_2 \approx -0.99$$. Of the 128 units, 56 have $$v_j < 0$$ and $$b_j > 0$$: they are on for an empty canvas and push toward class 0 until ink switches them off. The agents' account of class-0 units as "on by default" is confirmed.
 
 **One decision, unit by unit.** Because $$z = \sum_j c_j(x) + b_2$$ exactly, we can watch a single decision being assembled:
 
-<figure>
-  <img src="{{ '/assets/img/f11_waterfall.png' | relative_url }}" alt="Waterfall of the logit for one handwritten 3: output bias, then the largest positive and negative unit contributions, summing to z = 9.37">
-  <figcaption>Figure 10. How the network reaches \(z = 9.37\) for one 3. Only 47 units are active, and a handful of 3-specialists (units 17, 96, 69) do most of the work against several class-0 units.</figcaption>
+<figure class="text-center my-4">
+  <img class="img-fluid rounded" loading="lazy" src="{{ '/assets/img/f11_waterfall.png' | relative_url }}" alt="Waterfall of the logit for one handwritten 3: output bias, then the largest positive and negative unit contributions, summing to z = 9.37">
+  <figcaption class="caption">Figure 10. How the network reaches \(z = 9.37\) for one 3. Only 47 units are active, and a handful of 3-specialists (units 17, 96, 69) do most of the work against several class-0 units.</figcaption>
 </figure>
 
 **Which pixels do the work.** Inside a cell the network is affine, so the logit splits exactly, with no approximation, into per-pixel terms plus a bias term:
@@ -267,9 +267,9 @@ $$
 
 (With a smooth activation like tanh, "gradient × input" would only be a local linear approximation.) Averaging the pixel term over each digit:
 
-<figure>
-  <img src="{{ '/assets/img/f10_attribution.png' | relative_url }}" alt="Ten heatmaps, one per digit, showing pixels pushing toward class 1 in blue and class 0 in orange">
-  <figcaption>Figure 11. Exact pixel attribution, averaged per digit. The 7's top bar and the 3's upper arc push hard toward class 1. A 1's central stroke and a 9's loop-to-stem junction push toward class 0.</figcaption>
+<figure class="text-center my-4">
+  <img class="img-fluid rounded" loading="lazy" src="{{ '/assets/img/f10_attribution.png' | relative_url }}" alt="Ten heatmaps, one per digit, showing pixels pushing toward class 1 in blue and class 0 in orange">
+  <figcaption class="caption">Figure 11. Exact pixel attribution, averaged per digit. The 7's top bar and the 3's upper arc push hard toward class 1. A 1's central stroke and a 9's loop-to-stem junction push toward class 0.</figcaption>
 </figure>
 
 **The agents' regions, erased.** The agents summarised the weights in five regions using a voting rule. For each region, they summed $$\lvert v_j \rvert$$ over units whose mean weight there is above $$+0.02$$ ("want ink") or below $$-0.02$$ ("forbid ink"). We then tested each region directly. For every image, we set the region's pixels to zero, $$\tilde X = M_R \odot X$$, re-ran the network, and recorded $$\Delta z = f(\tilde X) - f(X)$$.
@@ -284,9 +284,9 @@ $$
 
 The mean change is averaged over the images that have ink in the region, since erasing a blank region changes nothing. A flip is any image whose predicted class changes. A positive $$\Delta z$$ means the erased ink had been pushing toward class 0. One caveat: a digit with a block cut out of it is not natural handwriting, so this measures the network's response to that edit rather than an absolute "importance".
 
-<figure>
-  <img src="{{ '/assets/img/f12_regions.png' | relative_url }}" alt="Left: the five regions drawn over the mean digit. Middle: net weight vote per region. Right: the effect of erasing each region; the far bottom-left and top-right barely matter, the left-mid band matters most">
-  <figcaption>Figure 12. What the weights say about each region (middle) against what erasing it actually does (right, plotted as \(-\Delta z\) so both panels point toward the class the ink supports).</figcaption>
+<figure class="text-center my-4">
+  <img class="img-fluid rounded" loading="lazy" src="{{ '/assets/img/f12_regions.png' | relative_url }}" alt="Left: the five regions drawn over the mean digit. Middle: net weight vote per region. Right: the effect of erasing each region; the far bottom-left and top-right barely matter, the left-mid band matters most">
+  <figcaption class="caption">Figure 12. What the weights say about each region (middle) against what erasing it actually does (right, plotted as \(-\Delta z\) so both panels point toward the class the ink supports).</figcaption>
 </figure>
 
 The comparison is instructive. The weights point the right way in every region, but their *strength* is a poor guide:
@@ -298,9 +298,9 @@ Large weights in places the data never reaches are invisible to the network's ac
 
 **The units the agents named.** Our first write-up named specific units as evidence. Testing them:
 
-<figure>
-  <img src="{{ '/assets/img/f13_named_units.png' | relative_url }}" alt="Heatmap of mean contribution per digit for nine named units: units 69 and 17 fire strongly on 3s; units 23 and 96 support 7s; unit 27 never fires on 7s">
-  <figcaption>Figure 13. Mean contribution \(c_j(x)\) per digit for the units named as evidence. All nine have \(v_j > 0\), so each can only push toward class 1.</figcaption>
+<figure class="text-center my-4">
+  <img class="img-fluid rounded" loading="lazy" src="{{ '/assets/img/f13_named_units.png' | relative_url }}" alt="Heatmap of mean contribution per digit for nine named units: units 69 and 17 fire strongly on 3s; units 23 and 96 support 7s; unit 27 never fires on 7s">
+  <figcaption class="caption">Figure 13. Mean contribution \(c_j(x)\) per digit for the units named as evidence. All nine have \(v_j > 0\), so each can only push toward class 1.</figcaption>
 </figure>
 
 The 3-vs-8 claim holds up: units 69 and 17 contribute more than 2 to the logit on a 3 and about 0.1–0.2 on an 8. The 7 claims do not. Unit 27 never fires on a 7, and units 23 and 96, said to oppose the 7's top bar, are among the 7's strongest supporters. A unit can have negative weights on part of a stroke and still fire for the digit as a whole.
