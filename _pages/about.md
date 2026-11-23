@@ -11,9 +11,6 @@ profile:
   image: prof_pic.jpg
   image_circular: false
   more_info: >
-    <p>Indian Institute of Science</p>
-    <p>Bangalore 560012, India</p>
-    <p><a href="mailto:vanditpatel.iisc@gmail.com">vanditpatel.iisc@gmail.com</a></p>
 
 selected_papers: false # No publications yet, so the front page keeps this off.
 social: true # Renders the icon row driven by the social keys in _config.yml.
