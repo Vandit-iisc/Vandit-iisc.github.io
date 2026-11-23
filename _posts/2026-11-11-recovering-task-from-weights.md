@@ -12,6 +12,8 @@ authors:
 permalink: /blog/2026/11/recovering-task-from-weights/
 ---
 
+<p class="text-muted"><em>Vandit Patel (Indian Institute of Science), Prayalankar, and Prathosh A.P. (Indian Institute of Science)</em></p>
+
 Suppose someone hands you 100,609 floating-point numbers. They tell you these are the weights of a small network that takes a 28×28 grayscale image and outputs one bit. There are no training data, no labels and no description of the task. Could you work out what the network was trained to do?
 
 We put that question to large language models, in two ways. A single long call to **GPT-6 Astra** worked out that the network looks at handwritten digits, but it guessed the wrong rule: even vs. odd. A team of **Claude** agents, working without hints, settled confidently on a different wrong rule, "zero vs. everything else". Then they were told one small fact, that each class contains five digits. After that, their candidates came within one or two digits of the truth, and one of the four agents found the exact rule.
