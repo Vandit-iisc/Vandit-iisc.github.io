@@ -2,7 +2,7 @@
 layout: about
 title: about
 permalink: /
-subtitle: PhD student, Representation Learning Lab, <a href="https://iisc.ac.in/">Indian Institute of Science</a>, Bangalore.
+subtitle: PhD AI @ Representation Learning Lab, <a href="https://iisc.ac.in/">Indian Institute of Science</a>, Bangalore.
 
 # The profile block controls the photo and the contact card on the right.
 # The image is read from assets/img/, so drop the headshot there under this name.
