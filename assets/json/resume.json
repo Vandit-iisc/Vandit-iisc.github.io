@@ -54,7 +54,7 @@
         "Online Prediction and Learning",
         "Game Theory",
         "Detection and Estimation Theory",
-        "Topics in AI (audit)"
+        "Topics in AI"
       ]
     },
     {
@@ -134,7 +134,7 @@
     {
       "title": "All India Rank 2, GATE 2022 (Electrical Engineering)",
       "date": "2022-03-01",
-      "awarder": "IIT / MoE, Government of India",
+      "awarder": "MoE, Govt of India",
       "summary": ""
     },
     {
@@ -168,7 +168,6 @@
   "skills": [
     {
       "name": "Programming",
-      "level": "",
       "keywords": [
         "Python",
         "PyTorch",
@@ -180,7 +179,6 @@
     },
     {
       "name": "Machine Learning",
-      "level": "",
       "keywords": [
         "Generative models",
         "Representation learning",
