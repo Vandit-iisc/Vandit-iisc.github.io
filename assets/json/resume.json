@@ -160,16 +160,23 @@
     {
       "name": "Hand and Instrument Detection for Automatic Instrument Configuration and Control",
       "publisher": "Patent",
-      "releaseDate": "",
+      "releaseDate": "2026-07-16",
       "url": "",
-      "summary": "Patent filed during work at Stryker."
+      "summary": "Patent from work at Stryker, accepted July 2026."
     }
   ],
   "skills": [
     {
       "name": "Programming",
       "level": "",
-      "keywords": ["Python", "PyTorch", "TensorFlow", "MATLAB", "LaTeX", "Git"]
+      "keywords": [
+        "Python",
+        "PyTorch",
+        "TensorFlow",
+        "MATLAB",
+        "LaTeX",
+        "Git"
+      ]
     },
     {
       "name": "Machine Learning",
